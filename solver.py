@@ -5,11 +5,15 @@ from datetime import timedelta, time, datetime, date
 import warnings
 from streamlit import cache_data
 
-SHIFT_LENGTHS = [2, 3, 4]
-MAX_HOURS_PER_WEEK = 18
-
 @cache_data
-def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str, Employee], max_time=10) -> list[tuple[str, str, Timespan]] | None:
+def create_schedule(
+        to_schedule: list[tuple[str, Timespan]],
+        employees: dict[str, Employee],
+        solver_max_time=10,
+        max_hours_per_week=18,
+        shift_lengths=[2, 3, 4],
+        min_one_shift_per_employee=False
+    ) -> list[tuple[str, str, Timespan]] | None:
     """
     May take a while to run if there are many possible shifts.
     Returns a list of tuples containing the employee name, position scheduled, and shift timespan.
@@ -21,7 +25,7 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
     for pid, (position, timespan) in enumerate(to_schedule):
         timespan_time = timespan.strip_date()
         for possible_start in range(timespan_time.start.hour, timespan_time.end.hour):
-            for length in SHIFT_LENGTHS:
+            for length in shift_lengths:
                 start_time = time(possible_start)
                 
                 if start_time < timespan_time.start: start_time = timespan_time.start
@@ -48,16 +52,17 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
                 shift_vars[(emp_name, pid, shift)] = model.NewBoolVar(f'shift_e{emp_name}_p{pid}_s{shift}')
     
     # Constraints: Each employee must work at least one shift per scheduling period
-    for emp_name, emp_data in employees.items():
-        possible_shifts = [shift_vars[(emp_name, pid, shift)] for (pid, _), shift in all_shifts if (emp_name, pid, shift) in shift_vars]
-        if len(possible_shifts) > 0:
-            model.Add(sum(possible_shifts) >= 1)
-        else:
-            print(f"Employee {emp_name} has not qualified for any shifts. Quals: {emp_data.positions} Positions: {set(p for p, _ in to_schedule)}")
+    if min_one_shift_per_employee:
+        for emp_name, emp_data in employees.items():
+            possible_shifts = [shift_vars[(emp_name, pid, shift)] for (pid, _), shift in all_shifts if (emp_name, pid, shift) in shift_vars]
+            if len(possible_shifts) > 0:
+                model.Add(sum(possible_shifts) >= 1)
+            else:
+                print(f"Employee {emp_name} has not qualified for any shifts. Quals: {emp_data.positions} Positions: {set(p for p, _ in to_schedule)}")
     
     # Constraints: Ensure every position has exactly 1 employee at all times
     for pid, (position, timespan) in enumerate(to_schedule):
-        MINS_PER_CHECK = 15
+        MINS_PER_CHECK = 5
         current_time = timespan.start
         while current_time <= timespan.end:
             # Get all shifts that overlap with the current time
@@ -84,7 +89,7 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
     else:
         for emp_name_1, pid_1, shift_1 in shift_vars:
             for emp_name_2, pid_2, shift_2 in shift_vars:
-                if emp_name_1 == emp_name_2 and shift_1.start.hour <= shift_2.start.hour <= shift_1.end.hour + max(SHIFT_LENGTHS) + 1:
+                if emp_name_1 == emp_name_2 and shift_1.start.hour <= shift_2.start.hour <= shift_1.end.hour + max(shift_lengths) + 1:
                     model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
         
     
@@ -97,7 +102,7 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
                 for emp_name_s, pid_s, shift in shift_vars
                 if emp_name_s == emp_name and shift.start.date().isocalendar().week == week
             )
-            model.Add(total_time_worked <= MAX_HOURS_PER_WEEK * 3600)
+            model.Add(total_time_worked <= max_hours_per_week * 3600)
             
             # Hueristic: Minimizing deviation from preferred hours
             # Note: do hueristic here to not create a new varaible for total_time_worked
@@ -107,13 +112,13 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
         
             preferred_time = int(emp_data.preferred_hours * 3600)
             preferred_time = max(0, preferred_time)
-            preferred_time = min(MAX_HOURS_PER_WEEK * 3600, preferred_time)
+            preferred_time = min(max_hours_per_week * 3600, preferred_time)
             
             over_preferred = model.NewBoolVar(f'over_preferred_e{emp_name}')
             under_preferred = model.NewBoolVar(f'under_preferred_e{emp_name}')
             model.Add(over_preferred + under_preferred == 1)
             
-            deviation_from_preferred = model.NewIntVar(0, 3600*MAX_HOURS_PER_WEEK, f'deviation_e{emp_name}')
+            deviation_from_preferred = model.NewIntVar(0, 3600*max_hours_per_week, f'deviation_e{emp_name}')
             model.Add(total_time_worked - preferred_time <= deviation_from_preferred).OnlyEnforceIf(over_preferred)
             model.Add(preferred_time - total_time_worked <= deviation_from_preferred).OnlyEnforceIf(under_preferred)
             model.Add(total_time_worked - preferred_time >= 0).OnlyEnforceIf(over_preferred)
@@ -140,7 +145,7 @@ def create_schedule(to_schedule: list[tuple[str, Timespan]], employees: dict[str
     solver.parameters.use_branching_in_lp = True
     solver.parameters.optimize_with_core = True
     
-    if max_time > 0: solver.parameters.max_time_in_seconds = max_time
+    if solver_max_time > 0: solver.parameters.max_time_in_seconds = solver_max_time
     
     status = solver.Solve(model)
 
