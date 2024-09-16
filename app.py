@@ -9,6 +9,7 @@ import modules.solver as solver
 from modules.streamlit_utils import load_css
 
 import re
+import random
 
 
 # Inject style
@@ -16,7 +17,8 @@ load_css("./.streamlit/style.css")
 
 # Initialize session state
 seed = datetime.now().toordinal()
-st.session_state.seed = seed
+if 'seed' not in st.session_state:
+    st.session_state.seed = seed
 
 # Start & End Date
 if 'start_date' not in st.session_state or date.today() - st.session_state.start_date > timedelta(days=7):
@@ -122,8 +124,20 @@ with st.expander("To Fill"):
         use_container_width = True
     )
 
-should_reschedule = st.button("Schedule Shifts")
-if should_reschedule:
+# Schedule shifts
+def reseed():
+    st.session_state.seed = random.randint(0, 365)
+    
+left, right = st.columns(2)
+should_reschedule = left.button("Schedule Shifts")
+should_reseed     = right.button("Reseed & Schedule")
+
+if should_reseed:
+    st.session_state.seed = random.randint(0, 365) + st.session_state.seed
+    
+if should_reschedule or should_reseed:
+    st.write(f"Seed: {st.session_state.seed}")
+    
     employees = parse_data.parse_employees(st.session_state.preferences)
     parse_data.parse_availability(st.session_state.availability_report, employees)
     shifts_to_fill = parse_data.parse_to_fill(st.session_state.to_fill)
@@ -138,7 +152,8 @@ if should_reschedule:
         shifts_to_fill,
         employees,
         min_one_shift_per_employee=bool(min_one_shift),
-        max_hours_per_week=max_hours
+        max_hours_per_week=max_hours,
+        solver_seed=st.session_state.seed
     )
 
     if schedule == None:

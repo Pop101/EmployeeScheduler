@@ -9,7 +9,8 @@ from streamlit import cache_data
 def create_schedule(
         to_schedule: list[tuple[str, Timespan]],
         employees: dict[str, Employee],
-        solver_max_time=6,
+        solver_max_time=10,
+        solver_seed=0,
         max_hours_per_week=18,
         shift_lengths=[2, 3, 4],
         min_one_shift_per_employee=False
@@ -139,7 +140,7 @@ def create_schedule(
 
     # Solving the model
     solver = cp_model.CpSolver()
-    solver.parameters.random_seed = 0
+    solver.parameters.random_seed = solver_seed
     # solver.parameters.log_to_stdout = True
     # solver.parameters.log_search_progress = True
     solver.parameters.linearization_level = 2   # Use more aggressive linearization
