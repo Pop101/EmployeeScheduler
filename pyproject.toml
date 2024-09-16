@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "scheduler"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+ortools = "^9.10.4067"
+pandas = "^2.2.2"
+streamlit = "^1.38.0"
+dateparser = "^1.2.0"
+streamlit-calendar = "^1.2.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
