@@ -1,6 +1,6 @@
 from ortools.sat.python import cp_model
 from dataclasses import dataclass
-from dtypes import Timespan, Employee
+from modules.dtypes import Timespan, Employee
 from datetime import timedelta, time, datetime, date
 import warnings
 from streamlit import cache_data
@@ -9,7 +9,7 @@ from streamlit import cache_data
 def create_schedule(
         to_schedule: list[tuple[str, Timespan]],
         employees: dict[str, Employee],
-        solver_max_time=10,
+        solver_max_time=6,
         max_hours_per_week=18,
         shift_lengths=[2, 3, 4],
         min_one_shift_per_employee=False
@@ -21,6 +21,7 @@ def create_schedule(
     
     model = cp_model.CpModel()
     
+    # Create a list of all possible shifts on each position
     all_shifts:list[tuple[tuple[int, str], Timespan]] = []
     for pid, (position, timespan) in enumerate(to_schedule):
         timespan_time = timespan.strip_date()
@@ -42,7 +43,7 @@ def create_schedule(
     
     if len(all_shifts) == 0:
         print("No shifts to schedule.")
-        return None    
+        return None
 
     # Generate corresponding variables for each shift
     shift_vars:dict[tuple[str, int, Timespan], cp_model.IntVar] = dict()
@@ -142,7 +143,7 @@ def create_schedule(
     # solver.parameters.log_to_stdout = True
     # solver.parameters.log_search_progress = True
     solver.parameters.linearization_level = 2   # Use more aggressive linearization
-    solver.parameters.use_branching_in_lp = True
+    #solver.parameters.use_branching_in_lp = True
     solver.parameters.optimize_with_core = True
     
     if solver_max_time > 0: solver.parameters.max_time_in_seconds = solver_max_time
@@ -157,4 +158,7 @@ def create_schedule(
             schedule.append((emp_name, pid_to_position[pid], shift))
         return schedule
     else:
+        err_text = "Failed to schedule shifts. Ensure you have enough employees to cover all shifts!\n"
+        # for var_index in solver.ResponseProto():
+        #     print(var_index, model.VarIndexToVarProto(var_index))
         return None

@@ -156,31 +156,93 @@ class Timespan(object):
         
         raise TypeError("Cannot add %r to Timespan." % type(other))
     
+
+class Preferences():
+    """A class to store and manage employee preferences."""
+    def get_shift_preference(self, shift:Timespan) -> float:
+        raise NotImplementedError
+
+class AveragePreference(list[Preferences], Preferences):
+    """Returns the average preference of multiple preferences."""
+    def get_shift_preference(self, shift: Timespan) -> float:
+        if len(self) == 0: return 0.0
+        total_preferences = sum(p.get_shift_preference(shift) for p in self)
+        return total_preferences / len(self)
+
+class SpecificTODPreference(list[Timespan], Preferences):
+    """Returns 1 IFF a shift is entirely within a preferred time of day."""
+    def get_shift_preference(self, shift: Timespan) -> float:
+        return float(any(shift in timespan for timespan in self))
+
+@dataclass()
+class RelativeTODPreference(Preferences):
+    morning_shifts: int = 0
+    afternoon_shifts: int = 0
+    evening_shifts: int = 0
+    
+    def __post_init__(self):
+        if self.morning_shifts < 0 or self.afternoon_shifts < 0 or self.evening_shifts < 0:
+            raise ValueError("Shift preferences cannot be negative.")
+        
+        # Normalize each to be a percentage of the total
+        total_shifts = self.morning_shifts + self.afternoon_shifts + self.evening_shifts
+        if total_shifts == 0: 
+            self.morning_shifts = self.afternoon_shifts = self.evening_shifts = 1/3
+        else:
+            self.morning_shifts /= total_shifts
+            self.afternoon_shifts /= total_shifts
+            self.evening_shifts /= total_shifts
+    
+    def get_shift_preference(self, shift: Timespan) -> float:
+        start = shift.start.time()
+        if start < time(12, 0): return self.morning_shifts
+        if start < time(17, 0): return self.afternoon_shifts
+        return self.evening_shifts
+
 @dataclass()
 class Employee:
-    positions: set[str]        = field(default_factory=set)
-    availability: set[Timespan]= field(default_factory=set)
-    preferences: set[Timespan] = field(default_factory=set)
-    preferred_hours: float     = 0.0 # The number of hours the employee prefers to work in a week
-    tenure: int                = 0   # A general measure of how likely the employee is to get their preferences
-    preference_weight: float   = 1.0 # A multiplier for how much the employee's preferred hours matter
-    deviation_weight: float    = 1.0 # A multiplier for how much the employee's deviation from preferred hours matters
+    positions: set[str]            = field(default_factory=set)
+    availability: set[Timespan]    = field(default_factory=set)
+    preferences: list[Preferences] = field(default_factory=list)
+    preferred_hours: float         = 0.0 # The number of hours the employee prefers to work in a week
+    tenure: int                    = 0   # A general measure of how likely the employee is to get their preferences
+    preference_weight: float       = 1.0 # A multiplier for how much the employee's preferred hours matter
+    deviation_weight: float        = 1.0 # A multiplier for how much the employee's deviation from preferred hours matters
     
+    def __post_init__(self):
+        if not isinstance(self.positions, set):
+            raise TypeError("Positions must be a set.")
+        if not isinstance(self.availability, set):
+            raise TypeError("Availability must be a set.")
+        if not isinstance(self.preferences, list):
+            raise TypeError("Preferences must be a list.")
+        if self.tenure < 0:
+            raise ValueError("Tenure cannot be negative.")
+        
     def get_shift_preference(self, shift:Timespan):
         satisfaction = 0.0
-        is_available = any(shift in timespan for timespan in self.availability)
-        is_preferred = any(shift in timespan for timespan in self.preferences)
         
+        # If unavailable, return a very low satisfaction
+        is_available = any(shift in timespan for timespan in self.availability)
         if not is_available: satisfaction -= 1000
-        if is_preferred: satisfaction += 5
         
         # People generally don't like working 2hr blocks
         if shift.length.total_seconds() <= 7200:
             satisfaction -= 1
-        
+            
+        # Calculate satisfaction based on preferences
+        satisfaction += sum(p.get_shift_preference(shift) for p in self.preferences)
         return satisfaction
     
     def satisfaction_details(self, shifts:list[Timespan]) -> tuple:
+        """
+        Calculates the deviation score (distance from preferred hours)
+        preference satisfaction for a set of shifts identical to the solver's heuristic.
+        
+        This is useful for debugging purposes and is displayed by the frontend
+        
+        Returns a tuple of (deviation, preference) satisfaction.
+        """
         weekly_deviations = list()
         weekly_satisfaction = list()
         for week in set(shift.start.date().isocalendar().week for shift in shifts):

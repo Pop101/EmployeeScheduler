@@ -1,7 +1,7 @@
 import random
 import pandas as pd
 from itertools import chain
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, date
 
 names = [
     "Liam", "Emma", "Noah", "Olivia", "William", "Ava", "James", "Isabella", 
@@ -10,6 +10,7 @@ names = [
     "Matthew", "Ella", "Elijah", "Madison", "Daniel", "Scarlett", "Mason", "Victoria",
     "Michael", "Aria", "Logan", "Grace", "David", "Chloe", "Oliver", "Camila",
     "Joseph", "Penelope", "Gabriel", "Riley", "Samuel", "Layla", "Carter", "Lillian",
+    "Anthony", "Nora", "John", "Zoey", "Dylan", "Mila", "Luke", "Avery", "Christopher",
 ]
 
 positions = [
@@ -21,18 +22,26 @@ def choices(itr, min_count=1):
     assert min_count <= len(itr)
     return random.sample(itr, k=random.randint(min_count, len(itr)))
 
-def generate_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def generate_data(
+        start_date: date = None,
+        end_date: date = None,
+        names: list[str] = names,
+        seed: int = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Generates synthetic data for the scheduling problem.
     random.seed is based on the current day
     Returns 'availability_report', 'to_fill', 'preferences'
     """
-    today = datetime.now().date()
-    random.seed(today.day)
+    
+    if not start_date: start_date = datetime.now().date()
+    random.seed(seed or start_date.toordinal())
+    
+    if not end_date: end_date = start_date + timedelta(weeks=1)
     
     dates = list(
         map(lambda d: d.strftime("%B %d, %Y"), 
-            pd.date_range(start=today, end=today + timedelta(weeks=1), freq='D')
+            pd.date_range(start=start_date, end=end_date, freq='D')
         )
     )
     
@@ -45,7 +54,7 @@ def generate_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     availability_report = pd.DataFrame(columns=["Employee", "Positions"] + dates)
     to_fill = pd.DataFrame(columns=["Position", "Date", "Hours"])
-    preferences = pd.DataFrame(columns=["Employee", "Tenure", "Preferred Hours", "Favored Hours"])
+    preferences = pd.DataFrame(columns=["Employee", "Tenure", "Preferred Hours", "Morning Shifts", "Afternoon Shifts", "Evening Shifts", "Favored Hours"])
 
     for i, name in enumerate(names):
         # Assign qualifications
@@ -54,7 +63,7 @@ def generate_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         # Assign availability
         availability = list()
         for date in dates:
-            today_times = sorted(choices(times, min_count=4))
+            today_times = sorted(choices(times, min_count=0))
             if len(today_times) % 2 == 1: today_times = today_times[:-1]
             
             date_times_list = list()
@@ -81,7 +90,15 @@ def generate_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         
         # Add rows
         availability_report.loc[i] = [name, ', '.join(positions_assigned)] + availability
-        preferences.loc[i] = [name, tenure, preferred_hours, ', '.join(favored_hours)]
+        preferences.loc[i] = [
+            name,
+            tenure,
+            preferred_hours,
+            random.randint(0, 10),   # Morning Shifts
+            random.randint(0, 10),   # Afternoon Shifts
+            random.randint(0, 10),   # Evening Shifts
+            ', '.join(favored_hours) # Favored Hours
+        ]
         
     # Fill in the positions to fill
     for date in dates:
@@ -93,7 +110,7 @@ def generate_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                 start_time = time(11, 00).strftime("%I:%M %p")
                 end_time = time(23, 59).strftime("%I:%M %p")
             if datetime.strptime(date, "%B %d, %Y").weekday() >= 5:
-                start_time = time(12, 00).strftime("%I:%M %p")
+                start_time = time(12, 45).strftime("%I:%M %p")
                 
             to_fill.loc[len(to_fill)] = [position, date, f'{start_time} - {end_time}']
 

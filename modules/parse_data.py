@@ -1,4 +1,4 @@
-from dtypes import Timespan, Employee
+from modules.dtypes import Timespan, Employee, AveragePreference, RelativeTODPreference, SpecificTODPreference
 from dateparser import parse
 from datetime import datetime, time, timedelta, date
 import pandas as pd
@@ -28,10 +28,22 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
         tenure = row["Tenure"]
         preferred_hours = row["Preferred Hours"]
         
-        favored_hours = parse_cell(datetime.now().date(), row["Favored Hours"])
-        favored_hours = [x.strip_date() for x in favored_hours if x != None]
+        # Favored Hours Preferences
+        preferences = AveragePreference()
+        if 'Favored Hours' in row:
+            favored_hours = parse_cell(datetime.now().date(), row["Favored Hours"])
+            favored_hours = [x.strip_date() for x in favored_hours if x != None]
+            preferences.append(SpecificTODPreference(favored_hours))
         
-        employees[name] = Employee(tenure=tenure, preferences=favored_hours, preferred_hours=preferred_hours)
+        # Relative Time of Day Preferences (Morning, Afternoon, Evening)
+        morning_preferences = row.get("Morning Shifts", 0)
+        afternoon_shifts    = row.get("Afternoon Shifts", 0)
+        evening_shifts      = row.get("Evening Shifts", 0)
+        if morning_preferences or afternoon_shifts or evening_shifts:
+            preferences.append(RelativeTODPreference(morning_preferences, afternoon_shifts, evening_shifts))
+        
+        # Add employee to dictionary
+        employees[name] = Employee(tenure=tenure, preferences=preferences, preferred_hours=preferred_hours)
     return employees
 
 def parse_availability(raw_availability_data:pd.DataFrame, employees: dict[str, Employee]):
@@ -72,7 +84,7 @@ if __name__ == "__main__":
     print(f"Employees: {len(employees)}")
     print(f"To Fill: {len(to_fill)} rows")
     
-    import solver
+    import modules.solver as solver
     res = solver.create_schedule(to_fill, employees)
     print(res != None)
     
