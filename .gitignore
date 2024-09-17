@@ -8,3 +8,4 @@ cc.py
 fix_crash.md
 
 poetry.lock
+sandbox*
