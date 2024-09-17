@@ -185,7 +185,7 @@ if should_reschedule or should_reseed:
             ),
         })
 
-        # Display employee satisfaction
+        # Display employee Dissatisfaction
         get_emp_times = lambda emp_name: [shift for name_s, _, shift in schedule if name_s == emp_name]
         get_tot_hours = lambda emp_name: sum(shift.length.total_seconds() / 3600 for shift in get_emp_times(emp_name))
         emp_sats = pd.DataFrame(
@@ -193,25 +193,27 @@ if should_reschedule or should_reseed:
                 (emp_name, emp.tenure, get_tot_hours(emp_name), *emp.satisfaction_details(get_emp_times(emp_name)), emp.calculate_satisfaction(get_emp_times(emp_name)))
                 for emp_name, emp in employees.items()
             ],
-            columns=["Employee", "Tenure", "Hours Scheduled", "Deviation", "Preference", "Satisfaction"]
+            columns=["Employee", "Tenure", "Hours Scheduled", "Deviation", "Preference", "Dissatisfaction"]
         )
 
-        # Normalize the satisfaction values
+        # Normalize the Dissatisfaction values
         emp_sats["Deviation"] = emp_sats["Deviation"].fillna(0.0) / len(weeks)
         max_deviation = emp_sats["Deviation"].max()
         
+        emp_sats["Preference"] = emp_sats["Preference"].apply(abs)
         emp_sats["Preference"] = (emp_sats["Preference"] - emp_sats["Preference"].min()) / emp_sats["Preference"].max()
         emp_sats["Preference"] = emp_sats["Preference"].fillna(1.0) if emp_sats["Preference"].max() == 0 else emp_sats["Preference"].fillna(0.0)
         
-        emp_sats["Satisfaction"] = (emp_sats["Satisfaction"] - emp_sats["Satisfaction"].min()) / emp_sats["Satisfaction"].max()
-        emp_sats["Satisfaction"] = emp_sats["Satisfaction"].fillna(1.0) if emp_sats["Satisfaction"].max() == 0 else emp_sats["Satisfaction"].fillna(0.0)
+        emp_sats["Dissatisfaction"] = emp_sats["Dissatisfaction"].apply(abs)
+        emp_sats["Dissatisfaction"] = (emp_sats["Dissatisfaction"] - emp_sats["Dissatisfaction"].min()) / emp_sats["Dissatisfaction"].max()
+        emp_sats["Dissatisfaction"] = emp_sats["Dissatisfaction"].fillna(1.0) if emp_sats["Dissatisfaction"].max() == 0 else emp_sats["Dissatisfaction"].fillna(0.0)
         
-        # Display the satisfaction values
+        # Display the Dissatisfaction values
         st.dataframe(emp_sats, hide_index=True, use_container_width = True, column_config={
             "Employee": st.column_config.TextColumn("Employee Name"),
             "Tenure": st.column_config.NumberColumn("Employee Tenure"),
             "Hours Scheduled": st.column_config.NumberColumn("Hours Scheduled", format="%.1f hr"),
             "Deviation": st.column_config.ProgressColumn("Deviation from Preferred Hours", help="More is worse", format="%.1f hr", min_value=0.0, max_value=max_deviation),
             "Preference": st.column_config.ProgressColumn("Shift Preference", format="%.2f%%", min_value=0.0, max_value=1.0),
-            "Satisfaction": st.column_config.ProgressColumn("Satisfaction", format="%.2f%%", min_value=0.0, max_value=1.0),
+            "Dissatisfaction": st.column_config.ProgressColumn("Dissatisfaction", format="%.2f%%", min_value=0.0, max_value=1.0),
         })
