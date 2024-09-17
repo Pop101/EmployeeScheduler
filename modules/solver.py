@@ -96,6 +96,8 @@ def create_schedule(
         
     
     # Constraints: Limit the total number of hours each employee can work per week
+    # Also: Huertistic to minimize deviation from preferred hours
+    # Also: Huertistic to minimize time people work while unavailable
     deviation_terms = []
     for week in set(shift.start.date().isocalendar().week for _, shift in to_schedule):
         for emp_name, emp_data in employees.items():
@@ -135,8 +137,16 @@ def create_schedule(
         satisfaction = employee.get_shift_preference(shift)
         satisfaction_terms.append(shift_vars[(emp_name, pid, shift)] * satisfaction * employee.preference_weight * (employee.tenure + 1))
         
+    # Hueristic: Minimizing time worked while unavailable
+    hours_worked_unavailable_terms = []
+    for emp_name, pid, shift in shift_vars:
+        employee = employees[emp_name]
+        is_available = any(shift in timespan for timespan in employee.availability)
+        if not is_available:
+            hours_worked_unavailable_terms.append( shift_vars[(emp_name, pid, shift)] * int(shift.length.total_seconds()) )
+        
     # Minimize the deviation from preferred hours and maximize satisfaction
-    model.Minimize(5 * sum(deviation_terms) - sum(satisfaction_terms))
+    model.Minimize(5 * sum(deviation_terms) - sum(satisfaction_terms) + 10_000_000 * sum(hours_worked_unavailable_terms))
 
     # Solving the model
     solver = cp_model.CpSolver()

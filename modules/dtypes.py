@@ -15,7 +15,7 @@ class Timespan(object):
         if not isinstance(self.start, (datetime, time)):
             raise TypeError("Start and end must be of type datetime or time.")
         if self.start > self.end:
-            raise ValueError("Start must be before end.")
+            raise ValueError(f"Start  must be before end (start: {self.start}; end: {self.end}).")
 
     def strip_date(self) -> 'Timespan':
         if isinstance(self.start, datetime):
@@ -224,7 +224,7 @@ class Employee:
         
         # If unavailable, return a very low satisfaction
         is_available = any(shift in timespan for timespan in self.availability)
-        if not is_available: satisfaction -= 1000
+        if not is_available: satisfaction -= 10_000
         
         # People generally don't like working 2hr blocks
         if shift.length.total_seconds() <= 7200:
@@ -261,7 +261,7 @@ class Employee:
         )
     
     def calculate_satisfaction(self, shifts: list[Timespan]):
-        """Calculates satisfaction identical to the solver's heuristic."""
+        """Calculates satisfaction identical to the solver's maximization heuristic."""
         
         deviation, preference = self.satisfaction_details(shifts)
         return -5 * deviation + preference

@@ -10,6 +10,7 @@ from modules.streamlit_utils import load_css
 
 import re
 import random
+import numpy as np
 
 
 # Inject style
@@ -98,6 +99,7 @@ else:
 with st.expander("Settings"):
     min_one_shift = st.checkbox("Require at least one shift per employee", value=False)
     max_hours     = st.number_input("Max hours per week", min_value=0, max_value=40, value=18)
+    solver_time   = st.slider("Solver Time (seconds)", min_value=1, max_value=60, value=10)
     
 # Display data
 with st.expander("Employees and Preferences"):
@@ -153,7 +155,8 @@ if should_reschedule or should_reseed:
         employees,
         min_one_shift_per_employee=bool(min_one_shift),
         max_hours_per_week=max_hours,
-        solver_seed=st.session_state.seed
+        solver_seed=st.session_state.seed,
+        solver_max_time=solver_time
     )
 
     if schedule == None:
@@ -190,10 +193,21 @@ if should_reschedule or should_reseed:
         get_tot_hours = lambda emp_name: sum(shift.length.total_seconds() / 3600 for shift in get_emp_times(emp_name))
         emp_sats = pd.DataFrame(
             [
-                (emp_name, emp.tenure, get_tot_hours(emp_name), *emp.satisfaction_details(get_emp_times(emp_name)), emp.calculate_satisfaction(get_emp_times(emp_name)))
+                (
+                    emp_name,
+                    emp.tenure,
+                    emp.preferred_hours,
+                    get_tot_hours(emp_name), 
+                    *emp.satisfaction_details(get_emp_times(emp_name)),
+                    emp.calculate_satisfaction(get_emp_times(emp_name)),
+                    any(
+                        not any(shift in timespan for timespan in emp.availability)
+                        for shift in get_emp_times(emp_name)
+                    )
+                )
                 for emp_name, emp in employees.items()
             ],
-            columns=["Employee", "Tenure", "Hours Scheduled", "Deviation", "Preference", "Dissatisfaction"]
+            columns=["Employee", "Tenure", "Hours Preferred", "Hours Scheduled", "Deviation", "Preference", "Dissatisfaction", "Scheduled while Unavailable"]
         )
 
         # Normalize the Dissatisfaction values
@@ -203,10 +217,12 @@ if should_reschedule or should_reseed:
         emp_sats["Preference"] = emp_sats["Preference"].apply(abs)
         emp_sats["Preference"] = (emp_sats["Preference"] - emp_sats["Preference"].min()) / emp_sats["Preference"].max()
         emp_sats["Preference"] = emp_sats["Preference"].fillna(1.0) if emp_sats["Preference"].max() == 0 else emp_sats["Preference"].fillna(0.0)
+        emp_sats["Preference"] *= 100.0
         
-        emp_sats["Dissatisfaction"] = emp_sats["Dissatisfaction"].apply(abs)
-        emp_sats["Dissatisfaction"] = (emp_sats["Dissatisfaction"] - emp_sats["Dissatisfaction"].min()) / emp_sats["Dissatisfaction"].max()
-        emp_sats["Dissatisfaction"] = emp_sats["Dissatisfaction"].fillna(1.0) if emp_sats["Dissatisfaction"].max() == 0 else emp_sats["Dissatisfaction"].fillna(0.0)
+        emp_sats["Dissatisfaction"] = -1 * emp_sats["Dissatisfaction"]
+        emp_sats["Dissatisfaction"] = (emp_sats["Dissatisfaction"] - emp_sats["Dissatisfaction"].min()) / np.float32(emp_sats["Dissatisfaction"].max() - emp_sats["Dissatisfaction"].min())
+        emp_sats["Dissatisfaction"] = emp_sats["Dissatisfaction"].fillna(1.0)
+        emp_sats["Dissatisfaction"] *= 100.0
         
         # Display the Dissatisfaction values
         st.dataframe(emp_sats, hide_index=True, use_container_width = True, column_config={
@@ -214,6 +230,38 @@ if should_reschedule or should_reseed:
             "Tenure": st.column_config.NumberColumn("Employee Tenure"),
             "Hours Scheduled": st.column_config.NumberColumn("Hours Scheduled", format="%.1f hr"),
             "Deviation": st.column_config.ProgressColumn("Deviation from Preferred Hours", help="More is worse", format="%.1f hr", min_value=0.0, max_value=max_deviation),
-            "Preference": st.column_config.ProgressColumn("Shift Preference", format="%.2f%%", min_value=0.0, max_value=1.0),
-            "Dissatisfaction": st.column_config.ProgressColumn("Dissatisfaction", format="%.2f%%", min_value=0.0, max_value=1.0),
+            "Preference": st.column_config.ProgressColumn("Shift Preference", format="%.2f%%", min_value=0.0, max_value=100.0),
+            "Dissatisfaction": st.column_config.ProgressColumn("Dissatisfaction", format="%.2f%%", min_value=0.0, max_value=100.0),
+            "Scheduled while Unavailable": st.column_config.CheckboxColumn("Scheduled while Unavailable", help="True if the employee was scheduled during a time they were unavailable")
         })
+        
+        # Have the easily-importable data available for download
+        importable_data = pd.DataFrame(
+            [
+                (
+                    "",
+                    name,
+                    "",
+                    position,
+                    timespan.start.date().isoformat(),
+                    timespan.end.date().isoformat(),
+                    timespan.start.strftime("%I:%M %p"),
+                    timespan.end.strftime("%I:%M %p"),
+                    "",
+                    "",
+                    "",
+                    "",
+                    ""
+                )
+                for name, position, timespan in schedule
+            ],
+            columns=["eid", "name", "location", "position", "start date", "end date", "start time", "end time", "notes", "title", "open slots", "remote site", "shift tags"]
+        )
+        
+        st.download_button(
+            "Download Schedule",
+            importable_data.to_csv(index=False),
+            "schedule.csv",
+            "text/csv",
+            key="download_schedule"
+        )

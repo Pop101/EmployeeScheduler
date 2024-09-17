@@ -14,7 +14,7 @@ def parse_cell(day:date, cell:str) -> list[Timespan]:
             continue
         
         start_str, end_str = timespan_str.split("-")
-        if end_str.strip().casefold() in ("midnight", "12am"):
+        if end_str.strip().casefold() in ("midnight", "12am", "12:00am"):
             end_str = "11:59pm"
         start, end = parse(start_str), parse(end_str)
         timespans.append(Timespan(datetime.combine(day, start.time()), datetime.combine(day, end.time())))
@@ -55,12 +55,19 @@ def parse_availability(raw_availability_data:pd.DataFrame, employees: dict[str, 
         availability = set()
         for column in raw_availability_data.columns:
             # If the column is a date, parse. Otherwise skip
+            day = None
+            
             try:
                 day = datetime.strptime(column, "%B %d, %Y").date()
             except ValueError:
-                continue
+                pass
             
-            if pd.isna(row[column]):
+            try:
+                day = datetime.strptime(column, "%b %d, %Y").date()
+            except ValueError:
+                pass
+            
+            if pd.isna(row[column]) or day == None:
                 continue
             
             availability = availability.union(parse_cell(day, row[column]))
