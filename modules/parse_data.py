@@ -1,4 +1,4 @@
-from modules.dtypes import Timespan, Employee, AveragePreference, RelativeTODPreference, SpecificTODPreference
+from modules.dtypes import Timespan, Employee, AveragePreference, RelativeTODPreference, SpecificTODPreference, MixinPreference
 from dateparser import parse
 from datetime import datetime, time, timedelta, date
 import pandas as pd
@@ -39,8 +39,13 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
         morning_preferences = row.get("Morning Shifts", 0)
         afternoon_shifts    = row.get("Afternoon Shifts", 0)
         evening_shifts      = row.get("Evening Shifts", 0)
-        if morning_preferences or afternoon_shifts or evening_shifts:
-            preferences.append(RelativeTODPreference(morning_preferences, afternoon_shifts, evening_shifts))
+        night_shifts        = row.get("Night Shifts", 0)
+        if morning_preferences or afternoon_shifts or evening_shifts or night_shifts:
+            preferences.append(RelativeTODPreference(morning_preferences, afternoon_shifts, evening_shifts, night_shifts))
+        
+        # Shift mixins
+        if 'Mixins' in row:
+            preferences.append(MixinPreference(row["Mixins"]))
         
         # Add employee to dictionary
         employees[name] = Employee(tenure=tenure, preferences=preferences, preferred_hours=preferred_hours)

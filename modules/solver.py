@@ -4,6 +4,24 @@ from modules.dtypes import Timespan, Employee
 from datetime import timedelta, time, datetime, date
 import warnings
 from streamlit import cache_data
+import decimal
+
+def drange(x, y, jump):
+    x = decimal.Decimal(x)
+    while x < y:
+        yield float(x)
+        x += decimal.Decimal(jump)
+    
+def tfloat(time:time) -> float:
+    return time.hour + time.minute / 60
+
+def floatt(x:float) -> time:
+    return time(int(x), int((x % 1) * 60))
+
+def rfrac(x:float, frac:float):
+    if frac < 1:
+        frac = 1 / frac
+    return round(x * frac) / frac
 
 @cache_data
 def create_schedule(
@@ -12,8 +30,10 @@ def create_schedule(
         solver_max_time=10,
         solver_seed=0,
         max_hours_per_week=18,
-        shift_lengths=[2, 3, 4],
-        min_one_shift_per_employee=False
+        shift_lengths=[3, 4],
+        min_one_shift_per_employee=False,
+        absolute_shift_minimum_length=2.5,
+        shift_granularity=1
     ) -> list[tuple[str, str, Timespan]] | None:
     """
     May take a while to run if there are many possible shifts.
@@ -26,6 +46,7 @@ def create_schedule(
     all_shifts:list[tuple[tuple[int, str], Timespan]] = []
     for pid, (position, timespan) in enumerate(to_schedule):
         timespan_time = timespan.strip_date()
+        # drange(rfrac(tfloat(timespan_time.start), shift_granularity), rfrac(tfloat(timespan_time.end), shift_granularity), shift_granularity):
         for possible_start in range(timespan_time.start.hour, timespan_time.end.hour):
             for length in shift_lengths:
                 start_time = time(possible_start)
@@ -39,6 +60,14 @@ def create_schedule(
                 end   = datetime.combine(timespan.end.date(), end_time)
                 shift = Timespan(start, end)
                 
+                # Constraints: No shifts shorter than the minimum time
+                # This occurs when the shift is at the end of the day
+                if shift.length.total_seconds() < absolute_shift_minimum_length * 3600:
+                    continue
+                if shift.length.total_seconds() > max(shift_lengths) * 3600:
+                    continue
+                
+                # Append shift to list of all shifts
                 if shift.strip_date() in timespan_time:
                     all_shifts.append(((pid, position), shift))
     
@@ -80,7 +109,6 @@ def create_schedule(
                 model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
     
     # Constraints: No employee works longer than one shift at a time
-    # Note: consider limiting it to 1 shift per day
     if len(shift_vars) > 5_000:
         # Too many possible shifts to check for overlapping shifts (O(n^2) to even add)
         # Limit to 1 per day instead
@@ -93,7 +121,6 @@ def create_schedule(
             for emp_name_2, pid_2, shift_2 in shift_vars:
                 if emp_name_1 == emp_name_2 and shift_1.start.hour <= shift_2.start.hour <= shift_1.end.hour + max(shift_lengths) + 1:
                     model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
-        
     
     # Constraints: Limit the total number of hours each employee can work per week
     # Also: Huertistic to minimize deviation from preferred hours

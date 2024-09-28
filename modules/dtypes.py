@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, time, date
 from dataclasses import dataclass, field
-
+import warnings
+from textwrap import indent
 
 @dataclass(frozen=True)
 class Timespan(object):
@@ -164,11 +165,31 @@ class Preferences():
 
 class AveragePreference(list[Preferences], Preferences):
     """Returns the average preference of multiple preferences."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.weights = kwargs.get('weights', [])
+
     def get_shift_preference(self, shift: Timespan) -> float:
         if len(self) == 0: return 0.0
-        total_preferences = sum(p.get_shift_preference(shift) for p in self)
-        return total_preferences / len(self)
+        
+        if len(self.weights) == 0:
+            total_preferences = sum(p.get_shift_preference(shift) for p in self)
+            return total_preferences / len(self)
+        elif len(self) == len(self.weights):
+            total_preferences = sum(w * p.get_shift_preference(shift) for w, p in zip(self.weights, self))
+            return total_preferences / sum(self.weights)
+        else:
+            raise ValueError("Number of weights must match number of preferences.")
 
+@dataclass()
+class LengthPreference(Preferences):
+    """Returns 1 IFF a shift's length satisfies a lambda function."""
+    length_condition: callable
+    
+    def get_shift_preference(self, shift: Timespan) -> float:
+        return float(self.length_condition(shift.length))
+    
 class SpecificTODPreference(list[Timespan], Preferences):
     """Returns 1 IFF a shift is entirely within a preferred time of day."""
     def get_shift_preference(self, shift: Timespan) -> float:
@@ -179,25 +200,55 @@ class RelativeTODPreference(Preferences):
     morning_shifts: int = 0
     afternoon_shifts: int = 0
     evening_shifts: int = 0
+    night_shifts: int = 0
     
     def __post_init__(self):
-        if self.morning_shifts < 0 or self.afternoon_shifts < 0 or self.evening_shifts < 0:
+        if self.morning_shifts < 0 or self.afternoon_shifts < 0 or self.evening_shifts < 0 or self.night_shifts < 0:
             raise ValueError("Shift preferences cannot be negative.")
         
         # Normalize each to be a percentage of the total
-        total_shifts = self.morning_shifts + self.afternoon_shifts + self.evening_shifts
+        total_shifts = self.morning_shifts + self.afternoon_shifts + self.evening_shifts + self.night_shifts
         if total_shifts == 0: 
-            self.morning_shifts = self.afternoon_shifts = self.evening_shifts = 1/3
+            self.morning_shifts = self.afternoon_shifts = self.evening_shifts = self.night_shifts = 1/4
         else:
             self.morning_shifts /= total_shifts
             self.afternoon_shifts /= total_shifts
             self.evening_shifts /= total_shifts
+            self.night_shifts /= total_shifts
     
     def get_shift_preference(self, shift: Timespan) -> float:
         start = shift.start.time()
+        if start < time(8, 0): return self.night_shifts
         if start < time(12, 0): return self.morning_shifts
-        if start < time(17, 0): return self.afternoon_shifts
-        return self.evening_shifts
+        if start < time(16, 0): return self.afternoon_shifts
+        if start < time(20, 0): return self.evening_shifts
+        return self.night_shifts
+
+@dataclass()
+class MixinPreference():
+    """Executes code to determine shift preference."""
+    mixin: str = ""
+    
+    def __post_init__(self):
+        self.local_context = {
+            'timedelta': timedelta,
+            'time': time,
+            'datetime': datetime,
+            'date': date,
+        }
+        
+        # Wrap mixin in a function to allow use of return
+        self.mixin = f"def get_shift_preference(shift):\n{indent(self.mixin, '  ')}\npref_return_val = get_shift_preference(shift)"
+        
+    def get_shift_preference(self, shift: Timespan) -> float:       
+        try:
+            pref_return_val = 0.0
+            exec(self.mixin, self.local_context, {'shift': shift})
+            return pref_return_val
+        except Exception as e:
+            warnings.warn(f"Error in preference mixin: {e}")
+            return 0.0
+
 
 @dataclass()
 class Employee:
@@ -209,6 +260,14 @@ class Employee:
     preference_weight: float       = 1.0 # A multiplier for how much the employee's preferred hours matter
     deviation_weight: float        = 1.0 # A multiplier for how much the employee's deviation from preferred hours matters
     
+    @staticmethod
+    def get_default_preferences():
+        return AveragePreference([
+            LengthPreference(lambda x: 2.5*3600 <= x.total_seconds() <= 4*3600),
+            SpecificTODPreference([Timespan(time(12, 0), time(17, 0))]),
+            ], weights=[3, 1]
+        )
+        
     def __post_init__(self):
         if not isinstance(self.positions, set):
             raise TypeError("Positions must be a set.")
@@ -225,13 +284,13 @@ class Employee:
         # If unavailable, return a very low satisfaction
         is_available = any(shift in timespan for timespan in self.availability)
         if not is_available: satisfaction -= 10_000
-        
-        # People generally don't like working 2hr blocks
-        if shift.length.total_seconds() <= 7200:
-            satisfaction -= 1
             
         # Calculate satisfaction based on preferences
-        satisfaction += sum(p.get_shift_preference(shift) for p in self.preferences)
+        satisfaction += 5 * AveragePreference(self.preferences).get_shift_preference(shift)
+        
+        # Calculate satisfaction based on average preference
+        satisfaction += self.get_default_preferences().get_shift_preference(shift)
+        
         return satisfaction
     
     def satisfaction_details(self, shifts:list[Timespan]) -> tuple:

@@ -97,9 +97,11 @@ else:
 
 # Settings
 with st.expander("Settings"):
-    min_one_shift = st.checkbox("Require at least one shift per employee", value=False)
-    max_hours     = st.number_input("Max hours per week", min_value=0, max_value=40, value=18)
-    solver_time   = st.slider("Solver Time (seconds)", min_value=1, max_value=60, value=10)
+    min_one_shift     = st.checkbox("Require at least one shift per employee", value=False)
+    max_hours         = st.number_input("Max hours per week", min_value=0, max_value=60, value=18)
+    preference_weight = st.number_input("Preference Weight", min_value=0.0, max_value=10.0, value=1.5)
+    deviation_weight  = st.number_input("Deviation Weight", min_value=0.0, max_value=10.0, value=1.0)
+    solver_time       = st.slider("Solver Time (seconds)", min_value=1, max_value=60, value=10)
     
 # Display data
 with st.expander("Employees and Preferences"):
@@ -141,6 +143,11 @@ if should_reschedule or should_reseed:
     st.write(f"Seed: {st.session_state.seed}")
     
     employees = parse_data.parse_employees(st.session_state.preferences)
+    for _, emp in employees.items():
+        # Set preferences
+        emp.preference_weight = preference_weight
+        emp.deviation_weight = deviation_weight
+    
     parse_data.parse_availability(st.session_state.availability_report, employees)
     shifts_to_fill = parse_data.parse_to_fill(st.session_state.to_fill)
     weeks = set(shift.start.isocalendar().week for _, shift in shifts_to_fill)
