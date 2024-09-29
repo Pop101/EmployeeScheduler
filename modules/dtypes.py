@@ -181,6 +181,17 @@ class AveragePreference(list[Preferences], Preferences):
             return total_preferences / sum(self.weights)
         else:
             raise ValueError("Number of weights must match number of preferences.")
+    
+    def append(self, p: Preferences, weight: float = 1.0):
+        super().append(p)
+        self.weights.append(weight)
+
+class MaxPreference(list[Preferences], Preferences):
+    """Returns the maximum preference of multiple preferences."""
+
+    def get_shift_preference(self, shift: Timespan) -> float:
+        if len(self) == 0: return 0.0
+        return max(p.get_shift_preference(shift) for p in self)
 
 @dataclass()
 class LengthPreference(Preferences):
@@ -244,7 +255,7 @@ class MixinPreference():
         try:
             pref_return_val = 0.0
             exec(self.mixin, self.local_context, {'shift': shift})
-            return pref_return_val
+            return float(pref_return_val)
         except Exception as e:
             warnings.warn(f"Error in preference mixin: {e}")
             return 0.0

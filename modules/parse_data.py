@@ -1,8 +1,22 @@
-from modules.dtypes import Timespan, Employee, AveragePreference, RelativeTODPreference, SpecificTODPreference, MixinPreference
+from modules.dtypes import Timespan, Employee, AveragePreference, RelativeTODPreference, SpecificTODPreference, MixinPreference, MaxPreference
 from dateparser import parse
 from datetime import datetime, time, timedelta, date
 import pandas as pd
 
+TAG_DEFINITIONS = {
+    'morning': 'return shift.end.time() < time(12, 0)',
+    'afternoon': 'return shift.start.time() >= time(12, 0) and shift.end.time() <= time(18, 0)',
+    'evening': 'return shift.start.time() >= time(17, 0) and shift.end.time() <= time(21, 0)',
+    'night': 'return shift.start.time() >= time(20, 0) or shift.end.time() <= time(6, 0)',
+    'weekend': 'return shift.start.weekday() >= 5',
+    'noweekend': 'return shift.start.weekday() < 5',
+    'sunday': 'return shift.start.weekday() == 6',
+    'monday': 'return shift.start.weekday() == 0',
+    'tuesday': 'return shift.start.weekday() == 1',
+    'wednesday': 'return shift.start.weekday() == 2',
+    'thursday': 'return shift.start.weekday() == 3',
+    'friday': 'return shift.start.weekday() == 4',
+}
 def parse_cell(day:date, cell:str) -> list[Timespan]:
     if cell.casefold() == "all day":
         return [Timespan(datetime.combine(day, time.min), datetime.combine(day, time.max))]
@@ -34,7 +48,7 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
             favored_hours = parse_cell(datetime.now().date(), row["Favored Hours"])
             favored_hours = [x.strip_date() for x in favored_hours if x != None]
             preferences.append(SpecificTODPreference(favored_hours))
-        
+
         # Relative Time of Day Preferences (Morning, Afternoon, Evening)
         morning_preferences = row.get("Morning Shifts", 0)
         afternoon_shifts    = row.get("Afternoon Shifts", 0)
@@ -47,6 +61,15 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
         if 'Mixins' in row:
             preferences.append(MixinPreference(row["Mixins"]))
         
+        # Tags are pre-defined mixins
+        if 'Tags' in row and row['Tags'] != None:
+            tag_preferences = list()
+            for tag in row.get('Tags', '').split(','):
+                tag = tag.strip().casefold()
+                if tag in TAG_DEFINITIONS: tag_preferences.append(MixinPreference(TAG_DEFINITIONS[tag]))
+            if tag_preferences:
+                preferences.append(MaxPreference(tag_preferences), 7)       
+            
         # Add employee to dictionary
         employees[name] = Employee(tenure=tenure, preferences=preferences, preferred_hours=preferred_hours)
     return employees
