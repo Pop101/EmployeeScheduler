@@ -105,7 +105,7 @@ def create_schedule(
     # Constraints: Ensure no overlapping shifts for the same employee
     for emp_name_1, pid_1, shift_1 in shift_vars:
         for emp_name_2, pid_2, shift_2 in shift_vars:
-            if emp_name_1 == emp_name_2 and shift_1.overlaps_with(shift_2) and shift_1 != shift_2:
+            if emp_name_1 == emp_name_2 and shift_1.overlaps_with(shift_2) and ((shift_1 != shift_2) or (shift_1 == shift_2 and pid_1 != pid_2)):
                 model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
     
     # Constraints: No employee works longer than one shift at a time
