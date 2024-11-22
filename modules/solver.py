@@ -33,6 +33,7 @@ def create_schedule(
         shift_lengths=[3, 4],
         min_one_shift_per_employee=False,
         absolute_shift_minimum_length=2.5,
+        max_shifts_per_day=1,
         shift_granularity=1
     ) -> list[tuple[str, str, Timespan]] | None:
     """
@@ -90,7 +91,7 @@ def create_schedule(
                 model.Add(sum(possible_shifts) >= 1)
             else:
                 print(f"Employee {emp_name} has not qualified for any shifts. Quals: {emp_data.positions} Positions: {set(p for p, _ in to_schedule)}")
-    
+        
     # Constraints: Ensure every position has exactly 1 employee at all times
     for pid, (position, timespan) in enumerate(to_schedule):
         MINS_PER_CHECK = 5
@@ -108,19 +109,20 @@ def create_schedule(
             if emp_name_1 == emp_name_2 and shift_1.overlaps_with(shift_2) and ((shift_1 != shift_2) or (shift_1 == shift_2 and pid_1 != pid_2)):
                 model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
     
-    # Constraints: No employee works longer than one shift at a time
-    if len(shift_vars) > 5_000:
-        # Too many possible shifts to check for overlapping shifts (O(n^2) to even add)
-        # Limit to 1 per day instead
+    # Constraints: Limit the number of shifts each employee can work per day
+    for emp_name in employees.keys():
+        all_shifts_per_day:dict[int, list[cp_model.IntVar]] = dict() # maps day -> list of shifts
         for pid, (position, timespan) in enumerate(to_schedule):
-            for emp_name in employees.keys():
-                shifts_for_emp = [shift_vars[(emp_name_s, pid, shift)] for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name and pid == pid_s]
-                if len(shifts_for_emp) > 0: model.Add(sum(shifts_for_emp) <= 1)
-    else:
-        for emp_name_1, pid_1, shift_1 in shift_vars:
-            for emp_name_2, pid_2, shift_2 in shift_vars:
-                if emp_name_1 == emp_name_2 and shift_1.start.hour <= shift_2.start.hour <= shift_1.end.hour + max(shift_lengths) + 1:
-                    model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
+            day = timespan.start.date().day
+            shifts_for_emp = [shift_vars[(emp_name_s, pid, shift)] for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name and pid == pid_s]
+            
+            if day not in all_shifts_per_day:
+                all_shifts_per_day[day] = []
+            all_shifts_per_day[day].extend(shifts_for_emp)
+        
+        for day, shifts in all_shifts_per_day.items():
+            model.Add(sum(shifts) <= max_shifts_per_day)
+    
     
     # Constraints: Limit the total number of hours each employee can work per week
     # Also: Huertistic to minimize deviation from preferred hours
@@ -155,8 +157,19 @@ def create_schedule(
             model.Add(total_time_worked - preferred_time >= 0).OnlyEnforceIf(over_preferred)
             model.Add(total_time_worked - preferred_time <= 0).OnlyEnforceIf(under_preferred)
             
-            deviation_terms.append(deviation_from_preferred * emp_data.deviation_weight * (emp_data.tenure + 1))
+            percent_difference = model.NewIntVar(0, 100, f'percent_diff_e{emp_name}')
+            model.AddDivisionEquality(percent_difference, 100 * deviation_from_preferred, preferred_time)
+            
+            deviation_terms.append(percent_difference * emp_data.deviation_weight * (emp_data.tenure + 1))
 
+    # Constraints: Employees cannot work closing then open the next day
+    # for emp_name, emp_data in employees.items():
+    #     for pid, (position, timespan) in enumerate(to_schedule):
+    #         shifts_for_emp = [ (shift_vars[(emp_name_s, pid_s, shift)], shift) for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name ]
+    #         shifts_for_emp.sort(key=lambda x: x[1].start)
+            
+            
+        
     # Hueristic: Maximizing shift preferences
     satisfaction_terms = []
     for emp_name, pid, shift in shift_vars:

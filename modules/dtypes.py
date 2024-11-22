@@ -322,7 +322,7 @@ class Employee:
                 if shift.start.date().isocalendar().week == week
             ) / 3600
             
-            weekly_deviations   += [abs(total_time_worked - self.preferred_hours)]
+            weekly_deviations   += [abs(total_time_worked - self.preferred_hours) / self.preferred_hours]
             weekly_satisfaction += [sum(self.get_shift_preference(shift) for shift in shifts)]
         
         return (
