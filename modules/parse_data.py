@@ -8,8 +8,16 @@ TAG_DEFINITIONS = {
     'afternoon': 'return shift.start.time() >= time(12, 0) and shift.end.time() <= time(18, 0)',
     'evening': 'return shift.start.time() >= time(17, 0) and shift.end.time() <= time(21, 0)',
     'night': 'return shift.start.time() >= time(20, 0) or shift.end.time() <= time(6, 0)',
+    
+    'closing': 'return shift.end.time() >= time(20, 0)',
+    'noclosing': 'return shift.end.time() < time(20, 0)',
+    
+    'opening': 'return shift.start.time() < time(9, 0)',
+    'noopening': 'return shift.start.time() >= time(9, 00)',
+    
     'weekend': 'return shift.start.weekday() >= 5',
     'noweekend': 'return shift.start.weekday() < 5',
+    
     'sunday': 'return shift.start.weekday() == 6',
     'monday': 'return shift.start.weekday() == 0',
     'tuesday': 'return shift.start.weekday() == 1',
