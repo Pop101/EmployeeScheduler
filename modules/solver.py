@@ -111,17 +111,29 @@ def create_schedule(
     
     # Constraints: Limit the number of shifts each employee can work per day
     for emp_name in employees.keys():
-        all_shifts_per_day:dict[int, list[cp_model.IntVar]] = dict() # maps day -> list of shifts
+        all_shifts_per_day:dict[int, list[tuple[str, int, Timespan]]] = dict() # maps day -> list of shifts
         for pid, (position, timespan) in enumerate(to_schedule):
             day = timespan.start.date().day
-            shifts_for_emp = [shift_vars[(emp_name_s, pid, shift)] for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name and pid == pid_s]
+            shifts_for_emp = [(emp_name_s, pid, shift) for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name and pid == pid_s]
             
             if day not in all_shifts_per_day:
                 all_shifts_per_day[day] = []
             all_shifts_per_day[day].extend(shifts_for_emp)
         
         for day, shifts in all_shifts_per_day.items():
-            model.Add(sum(shifts) <= max_shifts_per_day)
+            model.Add(sum(shift_vars[shift_tuple] for shift_tuple in shifts) <= max_shifts_per_day)
+        
+        # Constraints: Employees cannot work closing then open the next day
+        for day, shift_list in all_shifts_per_day.items():
+            next_day = day + 1
+            if next_day not in all_shifts_per_day:
+                continue
+            
+            for (emp_name_1, pid_1, shift_1) in shift_list:
+                if shift_1.end.hour >= 20:
+                    for (emp_name_2, pid_2, shift_2) in all_shifts_per_day[next_day]:
+                        if shift_2.start.hour <= 10 and emp_name_1 == emp_name_2:
+                            model.Add(shift_vars[(emp_name_1, pid_1, shift_1)] + shift_vars[(emp_name_2, pid_2, shift_2)] <= 1)
     
     
     # Constraints: Limit the total number of hours each employee can work per week
@@ -137,7 +149,7 @@ def create_schedule(
             )
             model.Add(total_time_worked <= max_hours_per_week * 3600)
             if emp_data.maximum_hours != None and emp_data.maximum_hours > 0:
-                model.Add(total_time_worked <= emp_data.maximum_hours * 3600)
+                model.Add(total_time_worked <= int(emp_data.maximum_hours * 3600))
             
             # Hueristic: Minimizing deviation from preferred hours
             # Note: do hueristic here to not create a new varaible for total_time_worked
@@ -162,15 +174,7 @@ def create_schedule(
             percent_difference = model.NewIntVar(0, 100, f'percent_diff_e{emp_name}')
             model.AddDivisionEquality(percent_difference, 100 * deviation_from_preferred, preferred_time)
             
-            deviation_terms.append(percent_difference * emp_data.deviation_weight * (emp_data.tenure + 1))
-
-    # Constraints: Employees cannot work closing then open the next day
-    # for emp_name, emp_data in employees.items():
-    #     for pid, (position, timespan) in enumerate(to_schedule):
-    #         shifts_for_emp = [ (shift_vars[(emp_name_s, pid_s, shift)], shift) for emp_name_s, pid_s, shift in shift_vars if emp_name_s == emp_name ]
-    #         shifts_for_emp.sort(key=lambda x: x[1].start)
-            
-            
+            deviation_terms.append(percent_difference * emp_data.deviation_weight * (emp_data.tenure + 1))            
         
     # Hueristic: Maximizing shift preferences
     satisfaction_terms = []
