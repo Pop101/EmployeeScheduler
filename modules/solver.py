@@ -124,12 +124,12 @@ def create_schedule(
             model.Add(sum(shift_vars[shift_tuple] for shift_tuple in shifts) <= max_shifts_per_day)
         
         # Constraints: Employees cannot work closing then open the next day
-        for day, shift_list in all_shifts_per_day.items():
+        for day, day_shift_list in all_shifts_per_day.items():
             next_day = day + 1
             if next_day not in all_shifts_per_day:
                 continue
             
-            for (emp_name_1, pid_1, shift_1) in shift_list:
+            for (emp_name_1, pid_1, shift_1) in day_shift_list:
                 if shift_1.end.hour >= 20:
                     for (emp_name_2, pid_2, shift_2) in all_shifts_per_day[next_day]:
                         if shift_2.start.hour <= 10 and emp_name_1 == emp_name_2:
