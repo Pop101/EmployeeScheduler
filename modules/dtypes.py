@@ -267,6 +267,7 @@ class Employee:
     availability: set[Timespan]    = field(default_factory=set)
     preferences: list[Preferences] = field(default_factory=list)
     preferred_hours: float         = 0.0 # The number of hours the employee prefers to work in a week
+    maximum_hours: float           = None # The maximum number of hours the this employee can work in a week
     tenure: int                    = 0   # A general measure of how likely the employee is to get their preferences
     preference_weight: float       = 1.0 # A multiplier for how much the employee's preferred hours matter
     deviation_weight: float        = 1.0 # A multiplier for how much the employee's deviation from preferred hours matters

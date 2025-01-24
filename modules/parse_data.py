@@ -50,6 +50,12 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
         tenure = row["Tenure"]
         preferred_hours = row["Preferred Hours"]
         
+        # Parse per-employee max hours
+        try:
+            max_hours = float(row.get("Employee Max Hours", None))
+        except ValueError:
+            max_hours = None
+        
         # Favored Hours Preferences
         preferences = AveragePreference()
         if 'Favored Hours' in row:
@@ -79,7 +85,7 @@ def parse_employees(raw_employee_data:pd.DataFrame) -> dict[str, Employee]:
                 preferences.append(MaxPreference(tag_preferences), 7)       
             
         # Add employee to dictionary
-        employees[name] = Employee(tenure=tenure, preferences=preferences, preferred_hours=preferred_hours)
+        employees[name] = Employee(tenure=tenure, preferences=preferences, preferred_hours=preferred_hours, max_hours=max_hours)
     return employees
 
 def parse_availability(raw_availability_data:pd.DataFrame, employees: dict[str, Employee]):

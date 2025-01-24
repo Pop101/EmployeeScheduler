@@ -136,6 +136,8 @@ def create_schedule(
                 if emp_name_s == emp_name and shift.start.date().isocalendar().week == week
             )
             model.Add(total_time_worked <= max_hours_per_week * 3600)
+            if emp_data.maximum_hours != None and emp_data.maximum_hours > 0:
+                model.Add(total_time_worked <= emp_data.maximum_hours * 3600)
             
             # Hueristic: Minimizing deviation from preferred hours
             # Note: do hueristic here to not create a new varaible for total_time_worked

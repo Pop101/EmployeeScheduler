@@ -54,7 +54,7 @@ def generate_data(
 
     availability_report = pd.DataFrame(columns=["Employee", "Positions"] + dates)
     to_fill = pd.DataFrame(columns=["Position", "Date", "Hours"])
-    preferences = pd.DataFrame(columns=["Employee", "Tenure", "Preferred Hours", "Morning Shifts", "Afternoon Shifts", "Evening Shifts", "Favored Hours"])
+    preferences = pd.DataFrame(columns=["Employee", "Tenure", "Preferred Hours", "Employee Max Hours", "Morning Shifts", "Afternoon Shifts", "Evening Shifts", "Favored Hours"])
 
     for i, name in enumerate(names):
         # Assign qualifications
@@ -94,10 +94,11 @@ def generate_data(
             name,
             tenure,
             preferred_hours,
-            random.randint(0, 10),   # Morning Shifts
-            random.randint(0, 10),   # Afternoon Shifts
-            random.randint(0, 10),   # Evening Shifts
-            ', '.join(favored_hours) # Favored Hours
+            None if random.randint(0, 1) else random.randint(20, 40), # Max Hours
+            random.randint(0, 10),                                    # Morning Shifts
+            random.randint(0, 10),                                    # Afternoon Shifts
+            random.randint(0, 10),                                    # Evening Shifts
+            ', '.join(favored_hours)                                  # Favored Hours
         ]
         
     # Fill in the positions to fill
