@@ -101,7 +101,7 @@ with st.expander("Settings"):
     max_hours         = st.number_input("Max hours per week", min_value=0, max_value=60, value=18)
     preference_weight = st.number_input("Preference Weight", min_value=0.0, max_value=10.0, value=1.5)
     deviation_weight  = st.number_input("Deviation Weight", min_value=0.0, max_value=10.0, value=1.0)
-    solver_time       = st.slider("Solver Time (seconds)", min_value=1, max_value=60, value=10)
+    solver_time       = st.slider("Solver Time (seconds)", min_value=1, max_value=180, value=10)
     
 # Display data
 with st.expander("Employees and Preferences"):
