@@ -5,6 +5,7 @@ from datetime import timedelta, time, datetime, date
 import warnings
 from streamlit import cache_data
 import decimal
+from collections import defaultdict
 
 def drange(x, y, jump):
     x = decimal.Decimal(x)
@@ -34,7 +35,8 @@ def create_schedule(
         min_one_shift_per_employee=False,
         absolute_shift_minimum_length=2.5,
         max_shifts_per_day=1,
-        shift_granularity=1
+        shift_granularity=1,
+        consistent_shift_weight=1000
     ) -> list[tuple[str, str, Timespan]] | None:
     """
     May take a while to run if there are many possible shifts.
@@ -191,9 +193,47 @@ def create_schedule(
         if not is_available:
             hours_worked_unavailable_terms.append( shift_vars[(emp_name, pid, shift)] * int(shift.length.total_seconds()) )
         
+    # Hueristic: People prefer consistent shifts
+    consistent_shift_reward_terms = []
+    
+    # Group shifts by weekday and time
+    # [(weekday, start_hour, start_minute) -> [(emp_name, pid, shift)]]
+    weekday_time_shifts = defaultdict(list)
+    
+    for emp_name, pid, shift in shift_vars:
+        weekday = shift.start.weekday()
+        start_hour = shift.start.hour
+        start_minute = shift.start.minute
+        shift_key = (weekday, start_hour, start_minute)
+        weekday_time_shifts[shift_key].append((emp_name, pid, shift))
+    
+    # For each employee and weekday+time, add rewards for consistency
+    for shift_key, shifts in weekday_time_shifts.items():
+        # Group by employee
+        emp_shifts = defaultdict(list)
+        for emp_name, pid, shift in shifts:
+            emp_shifts[emp_name].append((pid, shift))
+        
+        # For each employee, reward consistent weekday+time shifts
+        for emp_name, emp_shifts_list in emp_shifts.items():
+            if len(emp_shifts_list) > 1:  # Only reward if multiple weeks have the same shift
+                for i, (pid1, shift1) in enumerate(emp_shifts_list):
+                    for pid2, shift2 in emp_shifts_list[i+1:]:
+                        if shift1.start.date() != shift2.start.date():  # Different DATES
+                            # Reward IFF they're on both true and both on the same weekday+time
+                            consistent_shift_reward_terms.append(
+                                shift_vars[(emp_name, pid1, shift1)] * 
+                                shift_vars[(emp_name, pid2, shift2)] * 
+                                consistent_shift_weight
+                            )
+                            
     # Minimize the deviation from preferred hours and maximize satisfaction
-    model.Minimize(5 * sum(deviation_terms) - sum(satisfaction_terms) + 10_000_000 * sum(hours_worked_unavailable_terms))
-
+    model.Minimize(
+        5 * sum(deviation_terms) - # Minimize (deviation from preferred hours)
+        sum(satisfaction_terms) + # Maximize (individual satisfactino)
+        10_000_000_000 * sum(hours_worked_unavailable_terms) - # Minimize (hours worked while unavailable)
+        sum(consistent_shift_reward_terms)  # Maximize (consistent shifts)
+    )
     # Solving the model
     solver = cp_model.CpSolver()
     solver.parameters.random_seed = solver_seed
