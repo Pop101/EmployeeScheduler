@@ -36,7 +36,7 @@ def create_schedule(
         absolute_shift_minimum_length=2.5,
         max_shifts_per_day=1,
         shift_granularity=1,
-        consistent_shift_weight=1000
+        consistent_shift_weight=1.5
     ) -> list[tuple[str, str, Timespan]] | None:
     """
     May take a while to run if there are many possible shifts.
