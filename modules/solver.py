@@ -201,7 +201,7 @@ def create_schedule(
     weekday_time_shifts = defaultdict(list)
     
     for emp_name, pid, shift in shift_vars:
-        weekday = shift.start.weekday()
+        weekday = shift.start.weekday()  # 0=Monday, 1=Tuesday, etc.
         start_hour = shift.start.hour
         start_minute = shift.start.minute
         shift_key = (weekday, start_hour, start_minute)
@@ -214,18 +214,27 @@ def create_schedule(
         for emp_name, pid, shift in shifts:
             emp_shifts[emp_name].append((pid, shift))
         
-        # For each employee, reward consistent weekday+time shifts
         for emp_name, emp_shifts_list in emp_shifts.items():
-            if len(emp_shifts_list) > 1:  # Only reward if multiple weeks have the same shift
+            if len(emp_shifts_list) > 1: 
                 for i, (pid1, shift1) in enumerate(emp_shifts_list):
-                    for pid2, shift2 in emp_shifts_list[i+1:]:
-                        if shift1.start.date() != shift2.start.date():  # Different DATES
-                            # Reward IFF they're on both true and both on the same weekday+time
-                            consistent_shift_reward_terms.append(
-                                shift_vars[(emp_name, pid1, shift1)] * 
-                                shift_vars[(emp_name, pid2, shift2)] * 
-                                consistent_shift_weight
-                            )
+                    for j, (pid2, shift2) in enumerate(emp_shifts_list[i+1:], i+1):
+                        if shift1.start.date() != shift2.start.date():  # Different days
+                            # Create a new boolean variable for this pair of shifts
+                            pair_var = model.NewBoolVar(f'consistent_pair_e{emp_name}_s{i}_{j}')
+                            
+                            # This variable is 1 iff both shifts are assigned to this employee
+                            model.AddBoolAnd([
+                                shift_vars[(emp_name, pid1, shift1)], 
+                                shift_vars[(emp_name, pid2, shift2)]
+                            ]).OnlyEnforceIf(pair_var)
+                            
+                            model.AddBoolOr([
+                                shift_vars[(emp_name, pid1, shift1)].Not(), 
+                                shift_vars[(emp_name, pid2, shift2)].Not()
+                            ]).OnlyEnforceIf(pair_var.Not())
+                            
+                            # Add reward for this consistent pair
+                            consistent_shift_reward_terms.append(consistent_shift_weight * pair_var)
                             
     # Minimize the deviation from preferred hours and maximize satisfaction
     model.Minimize(
