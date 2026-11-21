@@ -1,66 +1,48 @@
-
 # Employee Scheduler
 
-Are you a lazy manager? I certainly am. This application allows you to schedule employees based on their availability, preferences, and constraints. It uses hueristics and linear programming to create the best possible schedule where every shift is filled and *most* employees are happy.
+Build a weekly shift schedule from employee availability, staffing requirements and preferences. Review the result in a calendar, then export a CSV for import into Humanity.
 
-# Table of Contents
+[![Open GitHub issues](https://img.shields.io/github/issues/Pop101/EmployeeScheduler?style=flat-square)](https://github.com/Pop101/EmployeeScheduler/issues)
 
-- [Employee Scheduler](#employee-scheduler)
-- [Table of Contents](#table-of-contents)
+![Employee Scheduler screenshot showing the date range, settings, CSV upload and schedule controls](.github/appshot.png)
+
+## Table of Contents
+
 - [Overview](#overview)
 - [Technologies](#technologies)
 - [Setup](#setup)
 - [Usage](#usage)
-  - [Tags](#tags)
-  - [Mixins](#mixins)
-  - [Downloading Availability](#downloading-availability)
-  - [Exporting Schedule](#exporting-schedule)
 
-# Overview
+## Overview
 
-Schedule employees on [TCPHumanity](https://www.humanity.com/app/) based on their availability, preferences, and constraints!
+The app uses heuristics and mathematical optimization to balance coverage with employee preferences. Start with its synthetic sample or bring your own preferences, availability, and positions to fill. Review the result before using it.
 
-![Employee Scheduler](./github/appshot.png)
+## Technologies
 
-Easily export this schedule for quick upload and speedy turnaround time.
+- [Streamlit](https://streamlit.io/)
+- [OR-Tools](https://developers.google.com/optimization/)
+- [Pandas](https://pandas.pydata.org/)
+- [streamlit-calendar](https://github.com/im-perativa/streamlit-calendar)
+- [dateparser](https://dateparser.readthedocs.io/)
 
-# Technologies
+## Setup
 
-To create this, we used:
+The manifest requires Python above 3.10. From a checkout with Poetry available:
 
-- [Streamlit](https://streamlit.io): 1.38.0
-- [Google OrTools](https://developers.google.com/optimization/): 9.10.4067
-- [Pandas](https://pandas.pydata.org/): 2.2.2
-- [Dateparser](https://dateparser.readthedocs.io/en/latest/): 1.2.0
-- [Streamlit-Calendar](https://discuss.streamlit.io/t/new-component-streamlit-calendar-a-new-way-to-create-calendar-view-in-streamlit/48383): 1.2.0
-
-# Setup
-
-**Poetry**
-```bash
+```sh
 poetry install
 poetry run streamlit run app.py
 ```
 
-The website should be available at [localhost:8501](http://localhost:8501). It is also deployed on 
+Open [localhost:8501](http://localhost:8501). This command is checked against the repository; a clean install and hosted demo were not verified.
 
-# Usage
+## Usage
 
-First, gather your employee's preferences and save them in a CSV file with the following columns:
+1. Pick a window and try **Regenerate shifts** with sample data.
+2. For your own schedule, upload your preferences, availability, and shifts to fill as CSV files. The preferences file needs `Employee`, `Tenure`, and `Preferred Hours`; you can also set maximum hours, slots, tags, and time preferences. See [`modules/parse_data.py`](modules/parse_data.py) for the accepted fields.
+3. Choose **Schedule Shifts**, review coverage in the calendar, and export the result.
 
-| Employee | Tenure                  | Preferred Hours                      | Employee Max Hours               | Morning Shifts                        | Afternoon Shifts                      | Evening Shifts                       | Night Shifts                          | Mixins            | Tags              | Favored Hours                             |
-| -------- | ----------------------- | ------------------------------------ | -------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------ | ------------------------------------- | ----------------- | ----------------- | ----------------------------------------- |
-| <name>   | <weight of preferences> | <number of weekly hours they prefer> | <max weekly hours they can work> | <preference for shifts starting 8-12> | <preference for shifts starting 12-4> | <preference for shifts starting 4-8> | <preference for shifts starting 8-00> | <described below> | <described below> | <comma-separated list of preferred times> |
-| John Doe | 3                       | 40                                   | 50                               | 3                                     | 2                                     | 1                                    | 0                                     |                   |                   | 08:00 AM - 09:00 AM, 08:00 PM - 10:00 PM  |
-
-Note that the only required columns are:
-- Employee (Name)
-- Tenure
-- Preferred Hours
-
-The other columns are optional and can be left blank or omitted.
-
-## Tags
+### Tags
 
 There are many predefined tags that allow you to further customize individual employee preferences. These tags are:
 - morning: employee prefers morning shifts
@@ -70,29 +52,14 @@ There are many predefined tags that allow you to further customize individual em
 - closing: employee prefers closing shifts (shifts starting after 8PM)
 - opening: employee prefers opening shifts (shifts starting before 9AM)
 - weekend: employee prefers weekend shifts
-- noweeekend: employee prefers no weekend shifts
+- noweekend: employee prefers no weekend shifts
 - sunday: employee prefers Sunday shifts
 - \<weekday\>: employee prefers shifts on a specific day of the week (e.g. monday, tuesday, wednesday, thursday, friday, saturday)
 
-## Mixins
+### Mixins
 
-> [!CAUTION]
-> Mixins are complex and can easily cause security issues.
+Mixins are Python functions that score a shift for an employee. Use only functions you wrote or trust in a private local setup; do not execute code from an untrusted upload.
 
-Mixins are python functions that will be executed on a specific shift and should return a score representing that employee's weight for that shift.
+### Humanity CSV workflow
 
-For usage, see tag definitions in [modules/parse_data.py](https://github.com/Pop101/EmployeeScheduler/blob/main/modules/parse_data.py) and mixin definition in [modules/dtypes.py](https://github.com/Pop101/EmployeeScheduler/blob/main/modules/dtypes.py#L239).
-
-## Downloading Availability
-
-This application is designed to work with [TCPHumanity](https://www.humanity.com/app/). As such, it can easily download and parse the availability reports. To run one, simply open the reports tab in humanity:
-
-![Humanity Reports](./github/availability_report.png)
-
-Then, upload the availability report to the application!
-
-## Exporting Schedule
-
-When you are satisfied with the created schedule, you can download it to a local CSV. To upload this to [TCPHumanity](https://www.humanity.com/app/), simply open the schedule tab and upload the CSV file!
-
-![Uploading the Schedule](./github/import_sched_humanity.png)
+In Humanity, choose **Reports → Employee → Availability (New)**, select the required dates and positions, and generate the report. Upload it into Employee Scheduler. To bring a reviewed schedule back, use **ShiftPlanning → Tools → Import Schedule** and select the exported CSV. Use synthetic records when sharing a demo.
